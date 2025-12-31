@@ -190,7 +190,6 @@ const App = () => {
             <button 
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
                 className="p-1.5 md:p-2 hover:bg-white/10 rounded-xl"
-                // Logic from code 2 applied only to text/title for Desktop
                 title={!isMobile ? (isSidebarOpen ? "Close Details" : "Open Details") : (isSidebarOpen ? "Close Control Panel" : "Open Control Panel")}
             >
               {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -277,34 +276,15 @@ const App = () => {
             initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} 
             className={`absolute z-30 pointer-events-none flex items-stretch gap-3 md:gap-4 ${isMobile ? 'bottom-4 left-4 right-4 flex-col' : 'bottom-6 left-6 right-6 flex-row'}`}
           >
-            {/* Forecast Panel */}
-            {forecast && (
-              <div className={`border p-4 md:p-6 pointer-events-auto flex flex-col ${glassClass} ${themeClass} ${isMobile ? 'order-1 h-[180px] rounded-[1.5rem]' : 'flex-1 h-[320px] rounded-[2rem]'}`}>
-                <div className="flex items-center gap-2 mb-2 md:mb-4">
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">24h Progression</span>
-                </div>
-                <div className="flex-1 flex gap-4 overflow-x-auto no-scrollbar mask-fade-edges items-center">
-                  {forecast.list.slice(0, 16).map((h, i) => (
-                    <div key={i} className="min-w-[70px] md:min-w-[85px] flex flex-col items-center p-2 rounded-2xl hover:bg-blue-500/10 transition-colors cursor-help" title={h.weather[0].description}>
-                      <p className="text-[8px] md:text-[9px] font-bold text-slate-500 mb-1">{new Date(h.dt * 1000).getHours()}:00</p>
-                      <img src={`https://openweathermap.org/img/wn/${h.weather[0].icon}.png`} className="w-6 h-6 md:w-8 md:h-8 mb-1" alt="" />
-                      <p className="text-sm md:text-lg font-black">{Math.round(h.main.temp)}°</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Weather Details (Desktop Sidebar / Mobile Bottom) */}
+            
+            {/* 1. Weather Details (NOW ON THE LEFT ON DESKTOP) */}
             <AnimatePresence>
-              {isSidebarOpen && weather && (
+              {(isSidebarOpen || !isMobile) && weather && (
                 <motion.div 
-                  // Kept Mobile Animation identical to your main code, Desktop uses logic from code 2
                   initial={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
                   animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }} 
                   exit={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
-                  className={`border p-4 md:p-5 pointer-events-auto flex flex-col justify-between gap-4 order-2 shadow-2xl ${glassClass} ${themeClass} ${isMobile ? 'w-full h-auto rounded-[1.5rem]' : 'w-[400px] h-[320px] rounded-[2rem]'}`}
+                  className={`border p-4 md:p-5 pointer-events-auto flex flex-col justify-between gap-4 shadow-2xl ${glassClass} ${themeClass} ${isMobile ? 'w-full h-auto rounded-[1.5rem]' : 'w-[400px] h-[320px] rounded-[2rem]'}`}
                 >
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -338,6 +318,26 @@ const App = () => {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* 2. Forecast Panel (NOW ON THE RIGHT ON DESKTOP) */}
+            {forecast && (
+              <div className={`border p-4 md:p-6 pointer-events-auto flex flex-col ${glassClass} ${themeClass} ${isMobile ? 'order-1 h-[180px] rounded-[1.5rem]' : 'flex-1 h-[320px] rounded-[2rem]'}`}>
+                <div className="flex items-center gap-2 mb-2 md:mb-4">
+                    <Clock className="w-3 h-3 text-slate-500" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">24h Progression</span>
+                </div>
+                <div className="flex-1 flex gap-4 overflow-x-auto no-scrollbar mask-fade-edges items-center">
+                  {forecast.list.slice(0, 16).map((h, i) => (
+                    <div key={i} className="min-w-[70px] md:min-w-[85px] flex flex-col items-center p-2 rounded-2xl hover:bg-blue-500/10 transition-colors cursor-help" title={h.weather[0].description}>
+                      <p className="text-[8px] md:text-[9px] font-bold text-slate-500 mb-1">{new Date(h.dt * 1000).getHours()}:00</p>
+                      <img src={`https://openweathermap.org/img/wn/${h.weather[0].icon}.png`} className="w-6 h-6 md:w-8 md:h-8 mb-1" alt="" />
+                      <p className="text-sm md:text-lg font-black">{Math.round(h.main.temp)}°</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </motion.div>
         )}
       </AnimatePresence>
