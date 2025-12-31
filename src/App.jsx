@@ -1,20 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Loader2, Search, Map as MapIcon, Cloud, Wind, Droplets, 
-  Sun, Navigation, AlertCircle, Thermometer, Eye, 
-  Wind as WindIcon, Menu, X, MapPin, Calendar, Clock,
-  Activity, Layers, Waves, Gauge, Globe, Maximize2, Minimize2,
-  Moon, Info
+  Search, Cloud, Wind, Droplets, Sun, Thermometer, Eye, 
+  Wind as WindIcon, Menu, X, MapPin, Clock, Gauge, Globe, 
+  Maximize2, Minimize2, Moon, Navigation, Layout, Settings,
+  BarChart3, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- Configuration ---
 const API_KEY = "5d445c16eaac39b18ca87a89bc27675d"; 
 const BASE_URL = "https://api.openweathermap.org/data/2.5";
 const GEO_URL = "https://api.openweathermap.org/geo/1.0";
-
-const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
 const App = () => {
   const [search, setSearch] = useState("");
@@ -22,8 +17,6 @@ const App = () => {
   const [weather, setWeather] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [airQuality, setAirQuality] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [mapCenter, setMapCenter] = useState([40.7128, -74.0060]);
   const [activeLayer, setActiveLayer] = useState('precipitation_new');
@@ -36,335 +29,187 @@ const App = () => {
   const mapInstance = useRef(null);
   const baseTileLayer = useRef(null);
   const weatherLayerInstance = useRef(null);
-  const searchTimeout = useRef(null);
-
   const isMobile = windowWidth < 768;
 
-  // --- Resize Handler ---
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- Map Tile Logic ---
+  // Map Initialization
   useEffect(() => {
-    if (!mapInstance.current) return;
-    if (baseTileLayer.current) mapInstance.current.removeLayer(baseTileLayer.current);
-
-    let tileUrl = '';
-    if (isSatellite) {
-      tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-    } else {
-      tileUrl = isDarkMode 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    if (!mapInstance.current && window.L) {
+      const map = window.L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false }).setView(mapCenter, 8);
+      mapInstance.current = map;
+      updateMapLayer(activeLayer);
     }
-
-    baseTileLayer.current = window.L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      attribution: isSatellite ? 'Esri' : 'CartoDB'
-    }).addTo(mapInstance.current);
+    
+    if (mapInstance.current) {
+      if (baseTileLayer.current) mapInstance.current.removeLayer(baseTileLayer.current);
+      const tileUrl = isSatellite 
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+        : isDarkMode ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+      
+      baseTileLayer.current = window.L.tileLayer(tileUrl).addTo(mapInstance.current);
+    }
   }, [isSatellite, isDarkMode]);
 
-  const fetchWithRetry = async (url, retries = 3) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Status: ${response.status}`);
-      return await response.json();
-    } catch (err) {
-      if (retries > 0) {
-        await new Promise(res => setTimeout(res, 1000));
-        return fetchWithRetry(url, retries - 1);
-      }
-      throw err;
-    }
-  };
-
   const getWeatherData = useCallback(async (lat, lon) => {
-    setLoading(true);
-    setError(null);
-    setSuggestions([]);
-    setSearch(""); 
     try {
-      const [currentData, forecastData, airData] = await Promise.all([
-        fetchWithRetry(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`),
-        fetchWithRetry(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`),
-        fetchWithRetry(`${BASE_URL}/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`)
+      const [curr, fore, air] = await Promise.all([
+        fetch(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`).then(r => r.json()),
+        fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`).then(r => r.json()),
+        fetch(`${BASE_URL}/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`).then(r => r.json())
       ]);
-
-      setWeather(currentData);
-      setForecast(forecastData);
-      setAirQuality(airData.list[0]);
-      setMapCenter([lat, lon]);
-      
+      setWeather(curr);
+      setForecast(fore);
+      setAirQuality(air.list[0]);
       if (mapInstance.current) mapInstance.current.setView([lat, lon], 10);
-    } catch (err) {
-      setError("Atmospheric sync failed.");
-    } finally {
-      setLoading(false);
-    }
+      setSuggestions([]);
+      setSearch("");
+    } catch (e) { console.error(e); }
   }, []);
-
-  const handleLocateUser = useCallback(() => {
-    if (navigator.geolocation) {
-      setLoading(true);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => getWeatherData(pos.coords.latitude, pos.coords.longitude),
-        () => getWeatherData(40.7128, -74.0060),
-        { enableHighAccuracy: true }
-      );
-    }
-  }, [getWeatherData]);
-
-  useEffect(() => { handleLocateUser(); }, [handleLocateUser]);
-
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearch(value);
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (value.length > 2) {
-      searchTimeout.current = setTimeout(async () => {
-        try {
-          const data = await fetchWithRetry(`${GEO_URL}/direct?q=${encodeURIComponent(value)}&limit=5&appid=${API_KEY}`);
-          setSuggestions(data);
-        } catch (err) { console.error(err); }
-      }, 400);
-    } else { setSuggestions([]); }
-  };
 
   const updateMapLayer = (layerName) => {
     if (!mapInstance.current) return;
     setActiveLayer(layerName);
     if (weatherLayerInstance.current) mapInstance.current.removeLayer(weatherLayerInstance.current);
-    const newLayer = window.L.tileLayer(`https://tile.openweathermap.org/map/${layerName}/{z}/{x}/{y}.png?appid=${API_KEY}`, {
-      opacity: 0.5, zIndex: 100
-    });
-    newLayer.addTo(mapInstance.current);
-    weatherLayerInstance.current = newLayer;
+    weatherLayerInstance.current = window.L.tileLayer(`https://tile.openweathermap.org/map/${layerName}/{z}/{x}/{y}.png?appid=${API_KEY}`, { opacity: 0.5 }).addTo(mapInstance.current);
   };
 
-  useEffect(() => {
-    const initLeaflet = () => {
-      if (typeof window === 'undefined' || !window.L || !mapContainerRef.current || mapInstance.current) return;
-      const map = window.L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false }).setView(mapCenter, 8);
-      baseTileLayer.current = window.L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
-      mapInstance.current = map;
-      updateMapLayer('precipitation_new');
-    };
-
-    const loadScripts = () => {
-      if (window.L) { initLeaflet(); return; }
-      const link = document.createElement("link"); link.rel = "stylesheet"; link.href = LEAFLET_CSS; document.head.appendChild(link);
-      const script = document.createElement("script"); script.src = LEAFLET_JS; script.async = true;
-      script.onload = () => initLeaflet();
-      document.head.appendChild(script);
-    };
-    loadScripts();
-  }, []);
-
-  const getAQILevel = (aqi) => {
-    const levels = {
-      1: { label: "Good", color: "text-green-400", bg: "bg-green-400/20", borderColor: "border-green-500/30" },
-      2: { label: "Fair", color: "text-yellow-400", bg: "bg-yellow-400/20", borderColor: "border-yellow-500/30" },
-      3: { label: "Moderate", color: "text-orange-400", bg: "bg-orange-400/20", borderColor: "border-orange-500/30" },
-      4: { label: "Poor", color: "text-red-400", bg: "bg-red-400/20", borderColor: "border-red-500/30" },
-      5: { label: "Very Poor", color: "text-purple-400", bg: "bg-purple-400/20", borderColor: "border-purple-500/30" }
-    };
-    return levels[aqi] || levels[1];
-  };
-
-  const themeClass = isDarkMode ? "bg-black/60 text-slate-100 border-white/10" : "bg-white/80 text-slate-900 border-black/10";
-  const glassClass = isDarkMode ? "backdrop-blur-xl bg-black/60" : "backdrop-blur-xl bg-white/70";
+  const themeClass = isDarkMode ? "bg-black/70 text-slate-100 border-white/10" : "bg-white/90 text-slate-900 border-black/10";
 
   return (
-    <div className={`relative h-screen w-screen overflow-hidden font-sans transition-colors duration-500 ${isDarkMode ? 'bg-[#050505]' : 'bg-slate-100'}`}>
+    <div className={`relative h-screen w-screen overflow-hidden ${isDarkMode ? 'bg-black' : 'bg-slate-200'}`}>
       <div className="absolute inset-0 z-0" ref={mapContainerRef} />
-      
-      {/* Top Nav */}
-      <nav className={`absolute left-2 right-2 md:left-4 md:right-4 z-[100] flex pointer-events-none ${isMobile ? 'top-2 flex-col gap-2' : 'top-4 items-center justify-between'}`}>
-        
-        {/* Logo Section */}
-        <div className={`flex items-center pointer-events-auto border rounded-2xl ${glassClass} ${themeClass} ${isMobile ? 'justify-between w-full px-3 py-2' : 'gap-3 px-4 py-2'}`}>
-          <div className="flex items-center gap-2">
-            <button 
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-                className="p-1.5 md:p-2 hover:bg-white/10 rounded-xl"
-                title={isSidebarOpen ? "Close Control Panel" : "Open Control Panel"}
-            >
-              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-            <div className="flex items-center gap-1.5">
-              <Cloud className="w-5 h-5 md:w-6 md:h-6 text-blue-400" />
-              <span className="text-[10px] md:text-sm font-black tracking-widest uppercase">Vhiteskies</span>
-            </div>
-          </div>
 
-          {isMobile && (
-             <div className="flex items-center gap-2">
-                <button onClick={() => setIsSatellite(!isSatellite)} title="Toggle Satellite View" className={`p-2 rounded-xl border transition-all ${isSatellite ? 'bg-blue-500 border-blue-400' : 'bg-black/60 border-white/10'}`}>
-                  <Globe className="w-4 h-4" />
-                </button>
-                <button onClick={() => setIsFullMap(!isFullMap)} title="Toggle Full Map Mode" className={`p-2 rounded-xl border transition-all ${isFullMap ? 'bg-emerald-500 border-emerald-400' : 'bg-black/60 border-white/10'}`}>
-                  {isFullMap ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
-                </button>
-             </div>
-          )}
+      {/* Header */}
+      <nav className="absolute top-4 left-4 right-4 z-[100] flex items-center justify-between pointer-events-none">
+        <div className={`flex items-center gap-3 px-4 py-2 border rounded-2xl backdrop-blur-xl pointer-events-auto ${themeClass}`}>
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} title="Toggle Navigation Menu" className="p-2 hover:bg-white/10 rounded-xl">
+            {isSidebarOpen ? <X /> : <Menu />}
+          </button>
+          <Cloud className="text-blue-400" />
+          <span className="font-black uppercase tracking-tighter hidden md:block">Vhiteskies</span>
         </div>
 
-        {/* Search Bar */}
-        <div className={`relative pointer-events-auto ${isMobile ? 'w-full' : 'flex-1 max-w-lg mx-4'}`}>
-          <div className="relative group search-container">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" value={search} onChange={handleSearchChange} placeholder="Search city..."
-              className={`w-full border-2 border-blue-500/50 rounded-2xl py-3 pl-11 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/40 transition-all duration-300 search-input ${glassClass} ${isDarkMode ? 'text-white' : 'text-black'}`}
-            />
-            <button onClick={handleLocateUser} title="Get Current Location" className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-400">
-              <MapPin className="w-4 h-4" />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {suggestions.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className={`absolute top-full mt-2 left-0 right-0 border rounded-2xl overflow-hidden shadow-2xl z-[110] ${isDarkMode ? 'bg-black/90 border-white/10' : 'bg-white/95 border-black/10'}`}>
-                {suggestions.map((city, idx) => (
-                  <button key={idx} onClick={() => getWeatherData(city.lat, city.lon)}
-                    className="w-full text-left px-5 py-3 hover:bg-blue-500/20 flex flex-col border-b border-white/5 last:border-0">
-                    <span className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-black'}`}>{city.name}</span>
-                    <span className="text-[10px] text-slate-500 uppercase">{city.state ? `${city.state}, ` : ''}{city.country}</span>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="relative flex-1 max-w-md mx-4 pointer-events-auto group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search location..." 
+            className={`w-full py-3 pl-11 pr-4 rounded-2xl border-2 border-blue-500/30 focus:border-green-500/60 transition-all outline-none backdrop-blur-xl ${themeClass}`} 
+          />
         </div>
 
-        {/* Desktop Controls */}
-        {!isMobile && (
-          <div className="flex items-center gap-2 pointer-events-auto">
-            <button onClick={() => setIsSatellite(!isSatellite)} title="Satellite Imagery" className={`p-3 rounded-2xl backdrop-blur-xl border transition-all ${isSatellite ? 'bg-blue-500 border-blue-400' : themeClass}`}>
-              <Globe className="w-4 h-4" />
-            </button>
-            <button onClick={() => setIsFullMap(!isFullMap)} title="Expand Map View" className={`p-3 rounded-2xl backdrop-blur-xl border transition-all ${isFullMap ? 'bg-emerald-500 border-emerald-400' : themeClass}`}>
-              {isFullMap ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
-            </button>
-          </div>
-        )}
+        <div className="flex gap-2 pointer-events-auto">
+          <button onClick={() => setIsSatellite(!isSatellite)} title="Switch to Satellite" className={`p-3 border rounded-2xl backdrop-blur-xl ${themeClass} ${isSatellite ? 'bg-blue-500' : ''}`}><Globe className="w-5 h-5"/></button>
+          <button onClick={() => setIsFullMap(!isFullMap)} title="Toggle Full Map" className={`p-3 border rounded-2xl backdrop-blur-xl ${themeClass}`}><Maximize2 className="w-5 h-5"/></button>
+        </div>
       </nav>
 
-      {/* Layer Controls */}
-      <div className={`absolute z-40 flex flex-col gap-2 pointer-events-auto ${isMobile ? 'right-2 top-32' : 'right-4 top-24'}`}>
-        {[
-          { id: 'precipitation_new', icon: Waves, desc: "Rain/Precipitation" }, 
-          { id: 'wind_new', icon: WindIcon, desc: "Wind Speed" }, 
-          { id: 'pressure_new', icon: Gauge, desc: "Atmospheric Pressure" }, 
-          { id: 'temp_new', icon: Thermometer, desc: "Temperature Map" }
-        ].map(layer => (
-          <button key={layer.id} onClick={() => updateMapLayer(layer.id)} title={layer.desc}
-            className={`p-3 md:p-4 rounded-xl md:rounded-2xl backdrop-blur-xl border transition-all ${activeLayer === layer.id ? 'bg-blue-500 border-blue-400 text-white' : themeClass}`}>
-            <layer.icon className="w-4 h-4 md:w-5 md:h-5" />
+      {/* Layer Controls (Right) */}
+      <div className="absolute right-4 top-24 z-50 flex flex-col gap-2">
+        {[{id:'precipitation_new', icon:Waves, t:'Rain'}, {id:'wind_new', icon:WindIcon, t:'Wind'}, {id:'temp_new', icon:Thermometer, t:'Temp'}].map(l => (
+          <button key={l.id} onClick={() => updateMapLayer(l.id)} title={l.t} className={`p-4 border rounded-2xl backdrop-blur-xl transition-all ${activeLayer === l.id ? 'bg-blue-500 text-white' : themeClass}`}>
+            <l.icon className="w-5 h-5"/>
           </button>
         ))}
       </div>
 
-      {/* Main Dashboard */}
+      {/* Bottom Dashboard Area */}
       <AnimatePresence>
         {!isFullMap && (
-          <motion.div 
-            initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} 
-            className={`absolute z-30 pointer-events-none flex items-stretch gap-3 md:gap-4 ${isMobile ? 'bottom-4 left-4 right-4 flex-col' : 'bottom-6 left-6 right-6 flex-row'}`}
-          >
-            {/* Forecast Panel */}
+          <motion.div initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }} className="absolute bottom-6 left-6 right-6 z-40 pointer-events-none flex items-end gap-4 h-[320px]">
+            
+            {/* 1. LEFT SIDEBAR (Quarter width of progression) */}
+            <AnimatePresence>
+              {isSidebarOpen && (
+                <motion.div 
+                  initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -100, opacity: 0 }}
+                  className={`h-full w-1/5 min-w-[180px] border rounded-[2rem] p-6 backdrop-blur-2xl pointer-events-auto flex flex-col gap-6 ${themeClass}`}
+                >
+                  <div className="space-y-4">
+                    <button title="Dashboard Overview" className="flex items-center gap-3 w-full p-2 hover:bg-blue-500/20 rounded-xl transition-colors">
+                      <Layout className="w-5 h-5 text-blue-400" /> <span className="text-sm font-bold">Overview</span>
+                    </button>
+                    <button title="Weather Analytics" className="flex items-center gap-3 w-full p-2 hover:bg-blue-500/20 rounded-xl transition-colors">
+                      <BarChart3 className="w-5 h-5 text-emerald-400" /> <span className="text-sm font-bold">Analytics</span>
+                    </button>
+                    <button title="Severe Weather Alerts" className="flex items-center gap-3 w-full p-2 hover:bg-blue-500/20 rounded-xl transition-colors">
+                      <ShieldAlert className="w-5 h-5 text-orange-400" /> <span className="text-sm font-bold">Alerts</span>
+                    </button>
+                    <button title="App Settings" className="flex items-center gap-3 w-full p-2 hover:bg-blue-500/20 rounded-xl transition-colors">
+                      <Settings className="w-5 h-5 text-slate-400" /> <span className="text-sm font-bold">Settings</span>
+                    </button>
+                  </div>
+                  <div className="mt-auto border-t border-white/10 pt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                    v2.0 Stable
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* 2. CENTER/RIGHT 24h PROGRESSION (The "main" panel) */}
             {forecast && (
-              <div className={`border p-4 md:p-6 pointer-events-auto flex flex-col ${glassClass} ${themeClass} ${isMobile ? 'order-1 h-[180px] rounded-[1.5rem]' : 'flex-1 h-[320px] rounded-[2rem]'}`}>
-                <div className="flex items-center gap-2 mb-2 md:mb-4">
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">24h Progression</span>
+              <div className={`h-full flex-1 border rounded-[2rem] p-6 backdrop-blur-2xl pointer-events-auto flex flex-col ${themeClass}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-black uppercase tracking-widest opacity-60">Hourly Forecast</span>
                 </div>
-                <div className="flex-1 flex gap-4 overflow-x-auto no-scrollbar mask-fade-edges items-center">
-                  {forecast.list.slice(0, 16).map((h, i) => (
-                    <div key={i} className="min-w-[70px] md:min-w-[85px] flex flex-col items-center p-2 rounded-2xl hover:bg-blue-500/10 transition-colors cursor-help" title={h.weather[0].description}>
-                      <p className="text-[8px] md:text-[9px] font-bold text-slate-500 mb-1">{new Date(h.dt * 1000).getHours()}:00</p>
-                      <img src={`https://openweathermap.org/img/wn/${h.weather[0].icon}.png`} className="w-6 h-6 md:w-8 md:h-8 mb-1" alt="" />
-                      <p className="text-sm md:text-lg font-black">{Math.round(h.main.temp)}°</p>
+                <div className="flex-1 flex gap-6 overflow-x-auto no-scrollbar mask-fade">
+                  {forecast.list.slice(0, 12).map((h, i) => (
+                    <div key={i} className="min-w-[90px] flex flex-col items-center justify-center p-4 rounded-3xl hover:bg-blue-500/10 transition-all border border-transparent hover:border-blue-500/20">
+                      <p className="text-[10px] font-bold opacity-50 mb-2">{new Date(h.dt * 1000).getHours()}:00</p>
+                      <img src={`https://openweathermap.org/img/wn/${h.weather[0].icon}@2x.png`} className="w-12 h-12" alt="icon" />
+                      <p className="text-xl font-black mt-2">{Math.round(h.main.temp)}°</p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Weather Details (Desktop Sidebar / Mobile Bottom) */}
-            <AnimatePresence>
-              {isSidebarOpen && weather && (
-                <motion.div 
-                  initial={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
-                  animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }} 
-                  exit={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
-                  className={`border p-4 md:p-5 pointer-events-auto flex flex-col justify-between gap-4 order-2 shadow-2xl ${glassClass} ${themeClass} ${isMobile ? 'w-full h-auto rounded-[1.5rem]' : 'w-[400px] h-[320px] rounded-[2rem]'}`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-blue-400" />
-                        <h2 className="text-lg md:text-xl font-black">{weather.name}</h2>
-                    </div>
-                    <div title="Air Quality Index" className={`px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-black uppercase cursor-help ${getAQILevel(airQuality?.main?.aqi).bg} ${getAQILevel(airQuality?.main?.aqi).color}`}>
-                      AQI: {getAQILevel(airQuality?.main?.aqi).label}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { l: "Wind Speed", v: `${weather.wind.speed} m/s`, i: Wind },
-                      { l: "Humidity", v: `${weather.main.humidity}%`, i: Droplets },
-                      { l: "Pressure", v: `${weather.main.pressure} hPa`, i: Gauge },
-                      { l: "Visibility", v: `${(weather.visibility / 1000).toFixed(1)} km`, i: Eye }
-                    ].map((s, i) => (
-                      <div key={i} className="bg-blue-500/5 p-2 md:p-3 rounded-xl border border-white/5 hover:bg-blue-500/10 transition-colors">
-                        <p className="text-[7px] md:text-[8px] text-slate-500 font-black uppercase flex items-center gap-1">
-                            <s.i className="w-2 h-2" /> {s.l}
-                        </p>
-                        <p className="text-xs font-bold">{s.v}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div title="Detailed Pollutant Levels" className={`p-2 md:p-3 rounded-xl border flex justify-around items-center bg-opacity-10 cursor-help ${getAQILevel(airQuality?.main?.aqi).bg} ${getAQILevel(airQuality?.main?.aqi).borderColor}`}>
-                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">PM2.5</p><p className="text-[10px] md:text-xs font-black">{airQuality?.components.pm2_5.toFixed(1)}</p></div>
-                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">SO2</p><p className="text-[10px] md:text-xs font-black">{airQuality?.components.so2.toFixed(1)}</p></div>
-                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">NO2</p><p className="text-[10px] md:text-xs font-black">{airQuality?.components.no2.toFixed(1)}</p></div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* 3. WEATHER STATS (Far Right) */}
+            {weather && !isMobile && (
+              <div className={`h-full w-[300px] border rounded-[2rem] p-6 backdrop-blur-2xl pointer-events-auto flex flex-col justify-between ${themeClass}`}>
+                <div>
+                  <h2 className="text-2xl font-black mb-1">{weather.name}</h2>
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{weather.weather[0].description}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                   <div className="p-3 bg-white/5 rounded-2xl border border-white/5">
+                      <p className="text-[8px] font-black opacity-50 uppercase">Wind</p>
+                      <p className="font-bold">{weather.wind.speed} m/s</p>
+                   </div>
+                   <div className="p-3 bg-white/5 rounded-2xl border border-white/5">
+                      <p className="text-[8px] font-black opacity-50 uppercase">Humidity</p>
+                      <p className="font-bold">{weather.main.humidity}%</p>
+                   </div>
+                </div>
+                <div className="bg-blue-500 text-white p-4 rounded-2xl flex items-center justify-between">
+                  <span className="text-sm font-black uppercase">Feels Like</span>
+                  <span className="text-2xl font-black">{Math.round(weather.main.feels_like)}°</span>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Sticky Dark Mode Toggle (Bottom Right) */}
+      {/* Sticky Theme Toggle */}
       <button 
         onClick={() => setIsDarkMode(!isDarkMode)}
         title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        className={`fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[120] p-3 md:p-4 rounded-full shadow-2xl border-2 transition-all duration-300 hover:scale-110 active:scale-95 ${isDarkMode ? 'bg-blue-600 border-blue-400 text-white' : 'bg-yellow-400 border-yellow-600 text-black'}`}
+        className={`fixed bottom-6 right-6 z-[120] p-4 rounded-full shadow-2xl border-2 transition-all hover:scale-110 active:scale-95 ${isDarkMode ? 'bg-blue-600 border-blue-400 text-white' : 'bg-yellow-400 border-yellow-600 text-black'}`}
       >
-        {isDarkMode ? <Sun className="w-5 h-5 md:w-6 md:h-6" /> : <Moon className="w-5 h-5 md:w-6 md:h-6" />}
+        {isDarkMode ? <Sun /> : <Moon />}
       </button>
 
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .mask-fade-edges { mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent); }
-        .leaflet-container { background: ${isDarkMode ? '#000' : '#f8fafc'} !important; transition: background 0.5s ease; }
-        
-        .search-input {
-           border-color: rgba(59, 130, 246, 0.5);
-        }
-        .search-container:hover .search-input {
-           border-color: rgba(34, 197, 94, 0.8) !important;
-        }
-
-        .leaflet-tile { 
-           filter: ${isDarkMode ? 'brightness(0.8) contrast(1.2)' : 'none'} !important;
-           transition: filter 0.5s ease;
-        }
+        .mask-fade { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+        .leaflet-container { background: transparent !important; }
       `}</style>
     </div>
   );
