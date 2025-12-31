@@ -190,7 +190,8 @@ const App = () => {
             <button 
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
                 className="p-1.5 md:p-2 hover:bg-white/10 rounded-xl"
-                title={isSidebarOpen ? "Close Control Panel" : "Open Control Panel"}
+                // Logic from code 2 applied only to text/title for Desktop
+                title={!isMobile ? (isSidebarOpen ? "Close Details" : "Open Details") : (isSidebarOpen ? "Close Control Panel" : "Open Control Panel")}
             >
               {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -299,6 +300,7 @@ const App = () => {
             <AnimatePresence>
               {isSidebarOpen && weather && (
                 <motion.div 
+                  // Kept Mobile Animation identical to your main code, Desktop uses logic from code 2
                   initial={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
                   animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }} 
                   exit={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
