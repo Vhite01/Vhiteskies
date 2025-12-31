@@ -277,14 +277,14 @@ const App = () => {
             className={`absolute z-30 pointer-events-none flex items-stretch gap-3 md:gap-4 ${isMobile ? 'bottom-4 left-4 right-4 flex-col' : 'bottom-6 left-6 right-6 flex-row'}`}
           >
             
-            {/* 1. Weather Details (Left Side on Desktop, WIDER) */}
+            {/* 1. Weather Details (NOW ON THE LEFT ON DESKTOP) */}
             <AnimatePresence>
               {(isSidebarOpen || !isMobile) && weather && (
                 <motion.div 
                   initial={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
                   animate={isMobile ? { y: 0, opacity: 1 } : { x: 0, opacity: 1 }} 
                   exit={isMobile ? { y: 20, opacity: 0 } : { x: -50, opacity: 0 }} 
-                  className={`border p-4 md:p-6 pointer-events-auto flex flex-col justify-between gap-4 shadow-2xl ${glassClass} ${themeClass} ${isMobile ? 'w-full h-auto rounded-[1.5rem]' : 'md:w-[480px] h-[320px] rounded-[2rem]'}`}
+                  className={`border p-4 md:p-5 pointer-events-auto flex flex-col justify-between gap-4 shadow-2xl ${glassClass} ${themeClass} ${isMobile ? 'w-full h-auto rounded-[1.5rem]' : 'w-[400px] h-[320px] rounded-[2rem]'}`}
                 >
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -295,31 +295,31 @@ const App = () => {
                       AQI: {getAQILevel(airQuality?.main?.aqi).label}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2">
                     {[
                       { l: "Wind Speed", v: `${weather.wind.speed} m/s`, i: Wind },
                       { l: "Humidity", v: `${weather.main.humidity}%`, i: Droplets },
                       { l: "Pressure", v: `${weather.main.pressure} hPa`, i: Gauge },
                       { l: "Visibility", v: `${(weather.visibility / 1000).toFixed(1)} km`, i: Eye }
                     ].map((s, i) => (
-                      <div key={i} className="bg-blue-500/5 p-3 md:p-4 rounded-xl border border-white/5 hover:bg-blue-500/10 transition-colors">
+                      <div key={i} className="bg-blue-500/5 p-2 md:p-3 rounded-xl border border-white/5 hover:bg-blue-500/10 transition-colors">
                         <p className="text-[7px] md:text-[8px] text-slate-500 font-black uppercase flex items-center gap-1">
                             <s.i className="w-2 h-2" /> {s.l}
                         </p>
-                        <p className="text-sm font-bold">{s.v}</p>
+                        <p className="text-xs font-bold">{s.v}</p>
                       </div>
                     ))}
                   </div>
-                  <div title="Detailed Pollutant Levels" className={`p-3 md:p-4 rounded-xl border flex justify-around items-center bg-opacity-10 cursor-help ${getAQILevel(airQuality?.main?.aqi).bg} ${getAQILevel(airQuality?.main?.aqi).borderColor}`}>
-                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">PM2.5</p><p className="text-xs md:text-sm font-black">{airQuality?.components.pm2_5.toFixed(1)}</p></div>
-                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">SO2</p><p className="text-xs md:text-sm font-black">{airQuality?.components.so2.toFixed(1)}</p></div>
-                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">NO2</p><p className="text-xs md:text-sm font-black">{airQuality?.components.no2.toFixed(1)}</p></div>
+                  <div title="Detailed Pollutant Levels" className={`p-2 md:p-3 rounded-xl border flex justify-around items-center bg-opacity-10 cursor-help ${getAQILevel(airQuality?.main?.aqi).bg} ${getAQILevel(airQuality?.main?.aqi).borderColor}`}>
+                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">PM2.5</p><p className="text-[10px] md:text-xs font-black">{airQuality?.components.pm2_5.toFixed(1)}</p></div>
+                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">SO2</p><p className="text-[10px] md:text-xs font-black">{airQuality?.components.so2.toFixed(1)}</p></div>
+                    <div className="text-center"><p className="text-[7px] md:text-[8px] font-black opacity-60">NO2</p><p className="text-[10px] md:text-xs font-black">{airQuality?.components.no2.toFixed(1)}</p></div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* 2. Forecast Panel (Right Side on Desktop) */}
+            {/* 2. Forecast Panel (NOW ON THE RIGHT ON DESKTOP) */}
             {forecast && (
               <div className={`border p-4 md:p-6 pointer-events-auto flex flex-col ${glassClass} ${themeClass} ${isMobile ? 'order-1 h-[180px] rounded-[1.5rem]' : 'flex-1 h-[320px] rounded-[2rem]'}`}>
                 <div className="flex items-center gap-2 mb-2 md:mb-4">
